@@ -176,9 +176,26 @@
 
   .pool-info { font-size: 12px; color: var(--muted); text-align: center; margin-top: 12px; }
 
-  .session-options { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
-  .session-pill { flex: 1; min-width: 90px; padding: 10px; text-align: center; font-size: 13px; font-weight: 500; border-radius: 8px; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--muted); transition: all 0.15s; }
-  .session-pill.active { background: var(--accent); border-color: var(--accent); color: white; }
+  /* Calendar */
+  .cal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .cal-weekheader { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin-bottom:6px; }
+  .cal-wlabel { text-align:center; font-size:11px; font-weight:500; padding:4px 0; }
+  .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+  .cal-cell { aspect-ratio: 1 / 1.1; min-height:54px; border:1px solid var(--border); border-radius:8px; padding:4px; display:flex; flex-direction:column; gap:2px; background:var(--surface); position:relative; }
+  .cal-cell.empty { border-color:transparent; background:transparent; }
+  .cal-cell.is-today { border-color:var(--accent); border-width:2px; }
+  .cal-cell.has-data { background:#FAFAF6; }
+  .cal-day-num { font-size:11px; color:var(--muted); font-weight:500; }
+  .cal-cell.is-today .cal-day-num { color:var(--accent); }
+  .cal-score { font-size:10px; padding:1px 4px; border-radius:4px; text-align:center; line-height:1.4; font-weight:500; }
+  .cal-mock-good  { background:#D4EBDD; color:#1F5C3F; }
+  .cal-mock-mid   { background:#FCEAD0; color:#7A4900; }
+  .cal-mock-low   { background:#FADADA; color:#7A1F18; }
+  .cal-retest-good { background:#D9E5F1; color:#1A3A5C; }
+  .cal-retest-mid  { background:#E5DCEC; color:#4A2A6E; }
+  .cal-retest-low  { background:#F2DDDD; color:#7A1F18; }
+  .cal-summary { margin-top:14px; padding-top:12px; border-top:1px solid var(--border); font-size:12px; }
+  .cal-legend { display:inline-block; width:14px; height:10px; border-radius:3px; vertical-align:middle; margin-right:4px; }
 </style>
 </head>
 <body>
@@ -271,7 +288,10 @@
       <div id="sectionBars"></div>
     </div>
     <div class="card card-sm">
-      <div style="font-size:12px; color:var(--muted); font-weight:500; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:14px;">問題ごとの正誤</div>
+      <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:14px;">
+        <div style="font-size:12px; color:var(--muted); font-weight:500; text-transform:uppercase; letter-spacing:0.5px;">問題ごとの正誤</div>
+        <div id="totalTime" style="font-size:12px; color:var(--muted);"></div>
+      </div>
       <div id="reviewList"></div>
     </div>
     <div class="nav">
@@ -340,18 +360,35 @@ const QBANK = [{"text":"I ___ my keys somewhere in the house, but I can't find t
 // ─── State ────────────────────────────────────────────────────────────────────
 let questions = [];
 let userAnswers = [];
+let userAnswerTimes = [];
+let qStartTime = 0;
 let currentQ = 0;
 let answered = false;
 let sectionStats = {};
 let weakSections = [];
 let trainQuestions = [];
+let trainAnswers = [];
 let retestQuestions = [];
 let retestAnswers = [];
+let retestAnswerTimes = [];
+let retestStartTime = 0;
 let retestQ = 0;
 let retestAnswered = false;
 const TEST_SIZE = 10;
 const TRAIN_SIZE = 5;
 const RETEST_SIZE = 5;
+
+// ─── Encouraging notes for wrong answers ─────────────────────────────────────
+const KIND_WORDS = [
+  'おしい！次は大丈夫だよ。',
+  '気にしないで！この問題は次にきっとできる。',
+  'もう少し！焦らずゆっくり覚えよう。',
+  'ナイストライ！間違えた問題ほど力になるよ。',
+  'よくここまで頑張った！この問題はもう一度確認しよう。',
+  '大丈夫、誰でも最初は間違える。覚えるチャンス！',
+];
+function kindWord(i) { return KIND_WORDS[i % KIND_WORDS.length]; }
+function fmtSec(ms) { return Math.max(0, Math.round(ms / 1000)) + '秒'; }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 function shuffle(arr) {
@@ -365,6 +402,15 @@ function shuffle(arr) {
 function pick(arr, n) { return shuffle(arr).slice(0, n); }
 function bySection(name) { return QBANK.filter(q => q.section === name); }
 
+// Return a copy of q with choices randomly reordered and answer index updated.
+function shuffleChoices(q) {
+  const idx = q.choices.map((_, i) => i);
+  const order = shuffle(idx);
+  const newChoices = order.map(i => q.choices[i]);
+  const newAnswer = order.indexOf(q.answer);
+  return Object.assign({}, q, { choices: newChoices, answer: newAnswer });
+}
+
 function confirmExit() {
   if (currentQ > 0 || answered || retestQ > 0 || retestAnswered) {
     return confirm('進行中のテストがあります。ホームに戻りますか？（途中の解答は保存されません）');
@@ -373,10 +419,16 @@ function confirmExit() {
 }
 
 // ─── Storage / streak / history ───────────────────────────────────────────────
-function saveRecord(scoreLabel, pct, qCount) {
+// kind: 'mock' | 'retest'
+function saveRecord(kind, pct, qCount, totalTimeMs) {
   const history = JSON.parse(localStorage.getItem('eiken_history') || '[]');
-  history.unshift({ date: new Date().toLocaleDateString('ja-JP'), score: scoreLabel, pct, qCount, ts: Date.now() });
-  if (history.length > 50) history.length = 50;
+  history.unshift({
+    date: new Date().toLocaleDateString('ja-JP'),
+    kind, pct, qCount,
+    timeMs: totalTimeMs || 0,
+    ts: Date.now(),
+  });
+  if (history.length > 200) history.length = 200;
   localStorage.setItem('eiken_history', JSON.stringify(history));
   updateStreak();
 }
@@ -545,7 +597,7 @@ function goPhase(n, restart) {
 
 // ─── ① Mock Test ──────────────────────────────────────────────────────────────
 function initTest(_restart) {
-  currentQ = 0; userAnswers = []; answered = false;
+  currentQ = 0; userAnswers = []; userAnswerTimes = []; answered = false;
   // Compose a balanced random selection from all sections
   const N = TEST_SIZE;
   const vocab = bySection('語彙');
@@ -559,7 +611,7 @@ function initTest(_restart) {
     ...pick(vocab, nv),
     ...pick(gram, ng),
     ...pick(read, nr),
-  ]);
+  ]).map(shuffleChoices);
   document.getElementById('testSubtitle').textContent = `問題プールからランダムに${questions.length}問出題します`;
   document.getElementById('testNav').style.display = 'none';
   renderQuestion();
@@ -567,6 +619,7 @@ function initTest(_restart) {
 
 function renderQuestion() {
   answered = false;
+  qStartTime = Date.now();
   const q = questions[currentQ];
   const keys = ['A','B','C','D'];
   let qHtml = '';
@@ -587,7 +640,6 @@ function renderQuestion() {
       </div>
       ${qHtml}
       <div class="choices">${choicesHtml}</div>
-      <div class="exp-box" id="expBox"></div>
     </div>`;
 
   document.getElementById('testNav').style.display = 'flex';
@@ -604,17 +656,13 @@ function selectAnswer(idx) {
   if (answered) return;
   answered = true;
   userAnswers[currentQ] = idx;
-  const q = questions[currentQ];
+  userAnswerTimes[currentQ] = Date.now() - qStartTime;
+  // Show only "selected" — no correct/wrong reveal until end
   const btns = document.querySelectorAll('#phase1 .choice');
   btns.forEach((b, i) => {
     b.disabled = true;
-    if (i === q.answer) b.classList.add('correct');
-    else if (i === idx) b.classList.add('wrong');
+    if (i === idx) b.classList.add('selected');
   });
-  const box = document.getElementById('expBox');
-  box.classList.add('show');
-  const ok = idx === q.answer;
-  box.innerHTML = `<div class="exp-result ${ok ? 'ok' : 'ng'}">${ok ? '✓ 正解！' : '✗ 不正解'}</div>${escapeHtml(q.explanation || '')}`;
 }
 
 function nextQuestion() {
@@ -654,24 +702,33 @@ function showResults() {
   });
   document.getElementById('sectionBars').innerHTML = barHtml;
 
+  let totalTime = 0;
   let reviewHtml = '';
   questions.forEach((q, i) => {
     const ok = userAnswers[i] === q.answer;
+    const t = userAnswerTimes[i] || 0;
+    totalTime += t;
     const qText = (q.text || '').replace('___', '＿＿＿').substring(0, 80) + '...';
+    const yourPick = userAnswers[i] != null ? q.choices[userAnswers[i]] : '未回答';
+    const note = ok
+      ? '✓ 正解'
+      : `<div style="margin-top:6px; font-size:12px; color:var(--muted); line-height:1.6;">あなたの回答: ${escapeHtml(yourPick)} ／ 正解: <b>${escapeHtml(q.choices[q.answer])}</b></div>
+         <div style="margin-top:6px; padding:8px 10px; background:var(--bg); border-radius:6px; font-size:12px; color:var(--text); line-height:1.6;">
+           💛 ${escapeHtml(kindWord(i))}<br>${escapeHtml(q.explanation || '')}
+         </div>`;
     reviewHtml += `<div class="review-item">
-      <div class="review-q">Q${i+1}. ${escapeHtml(qText)}</div>
-      <div class="review-answer ${ok ? 'review-correct' : 'review-wrong'}">
-        ${ok ? '✓ 正解' : `✗ 不正解 — 正解: ${escapeHtml(q.choices[q.answer])}`}
-      </div>
+      <div class="review-q">Q${i+1}. ${escapeHtml(qText)} <span style="color:var(--muted); font-size:11px; font-weight:400;">[${fmtSec(t)}]</span></div>
+      <div class="review-answer ${ok ? 'review-correct' : 'review-wrong'}">${note}</div>
     </div>`;
   });
   document.getElementById('reviewList').innerHTML = reviewHtml;
+  document.getElementById('totalTime').textContent = '合計時間: ' + fmtSec(totalTime) + '（平均 ' + fmtSec(totalTime / questions.length) + '/問）';
 
   weakSections = Object.entries(sectionStats)
     .filter(([, d]) => Math.round(d.correct / d.total * 100) < 70)
     .map(([n]) => n);
 
-  saveRecord(pct + '点', pct, questions.length);
+  saveRecord('mock', pct, questions.length, totalTime);
 }
 
 // ─── ③ Weak Areas ─────────────────────────────────────────────────────────────
@@ -703,51 +760,76 @@ function showWeakAreas() {
 // ─── ④ Training ───────────────────────────────────────────────────────────────
 function loadTraining() {
   const target = weakSections.length > 0 ? weakSections : Object.keys(sectionStats);
-  document.getElementById('trainSubtitle').textContent = `重点強化: ${target.join('・')}`;
-  // pick 5 NEW questions from target sections (excluding ones from the test)
+  document.getElementById('trainSubtitle').textContent = `重点強化: ${target.join('・')}（${TRAIN_SIZE}問）`;
   const usedIds = new Set(questions.map(q => q.id));
   const pool = QBANK.filter(q => target.includes(q.section) && !usedIds.has(q.id));
-  trainQuestions = pick(pool, Math.min(TRAIN_SIZE, pool.length));
+  trainQuestions = pick(pool, Math.min(TRAIN_SIZE, pool.length)).map(shuffleChoices);
+  trainAnswers = new Array(trainQuestions.length).fill(null);
+  renderTrainArea(false);
+}
 
+function renderTrainArea(graded) {
   let html = '';
   trainQuestions.forEach((q, i) => {
     const qText = (q.text || '').replace('___', '<span class="q-blank">　　　</span>');
     const passHtml = q.passage ? `<div class="q-passage" style="font-size:13px;">${escapeHtml(q.passage)}</div>` : '';
-    const choicesHtml = q.choices.map((c, ci) =>
-      `<button class="choice" id="tr_${i}_${ci}" onclick="selectTrain(${i},${ci})" style="font-size:13px; padding:10px 14px;">
+    const picked = trainAnswers[i];
+    const choicesHtml = q.choices.map((c, ci) => {
+      let cls = 'choice';
+      if (graded) {
+        if (ci === q.answer) cls += ' correct';
+        else if (ci === picked) cls += ' wrong';
+      } else if (ci === picked) {
+        cls += ' selected';
+      }
+      const dis = graded ? 'disabled' : '';
+      return `<button class="${cls}" id="tr_${i}_${ci}" onclick="selectTrain(${i},${ci})" ${dis} style="font-size:13px; padding:10px 14px;">
         <span class="choice-key" style="font-size:11px;">${['A','B','C','D'][ci]}</span>${escapeHtml(c)}
-      </button>`
-    ).join('');
+      </button>`;
+    }).join('');
+    let expHtml = '';
+    if (graded) {
+      const ok = picked === q.answer;
+      expHtml = `<div class="exp-box show">
+        <div class="exp-result ${ok ? 'ok' : 'ng'}">${ok ? '✓ 正解！' : '✗ 不正解 — 正解: ' + escapeHtml(q.choices[q.answer])}</div>
+        ${!ok ? `<div style="margin-top:6px; padding:8px 10px; background:#FFFBEC; border-radius:6px; color:#7A4900;">💛 ${escapeHtml(kindWord(i))}</div>` : ''}
+        <div style="margin-top:6px;">${escapeHtml(q.explanation || '')}</div>
+      </div>`;
+    }
     html += `<div class="train-item">
       <div class="train-num">${q.section} — 問題${i+1}</div>
       ${passHtml}
       <div class="q-text" style="font-size:14px; margin-bottom:12px;">${qText}</div>
       <div class="choices">${choicesHtml}</div>
-      <div class="exp-box" id="trExp_${i}">
-        <div style="font-size:12px; color:var(--muted); margin-bottom:4px;">解説</div>
-        <div>${escapeHtml(q.explanation || '')}</div>
-      </div>
+      ${expHtml}
     </div>`;
   });
+  // Add a "answer all" button if not graded
+  if (!graded) {
+    html += `<div class="nav" style="margin-top:8px;">
+      <span style="font-size:13px; color:var(--muted);" id="trainStatus">${trainAnswers.filter(a => a != null).length} / ${trainQuestions.length} 回答済み</span>
+      <button class="btn btn-primary" onclick="gradeTraining()">答え合わせをする →</button>
+    </div>`;
+  }
   document.getElementById('trainArea').innerHTML = html || '<div class="card"><p style="color:var(--muted); font-size:14px;">トレーニング用の問題がありません。</p></div>';
 }
 
 function selectTrain(qi, ci) {
-  const q = trainQuestions[qi];
-  ['A','B','C','D'].forEach((_, i) => {
-    const btn = document.getElementById(`tr_${qi}_${i}`);
-    if (!btn) return;
-    btn.disabled = true;
-    btn.classList.remove('selected','correct','wrong');
-    if (i === q.answer) btn.classList.add('correct');
-    else if (i === ci) btn.classList.add('wrong');
-  });
-  document.getElementById(`trExp_${qi}`).classList.add('show');
+  trainAnswers[qi] = ci;
+  // Lightweight update: just re-render to show selection
+  renderTrainArea(false);
+}
+
+function gradeTraining() {
+  if (trainAnswers.some(a => a == null)) {
+    if (!confirm('未回答の問題があります。このまま答え合わせをしますか？')) return;
+  }
+  renderTrainArea(true);
 }
 
 // ─── ⑤ Retest ─────────────────────────────────────────────────────────────────
 function loadRetest() {
-  retestQ = 0; retestAnswers = []; retestAnswered = false;
+  retestQ = 0; retestAnswers = []; retestAnswerTimes = []; retestAnswered = false;
   document.getElementById('retestNav').style.display = 'none';
   const target = weakSections.length > 0 ? weakSections : Object.keys(sectionStats);
   const usedIds = new Set([
@@ -755,7 +837,7 @@ function loadRetest() {
     ...trainQuestions.map(q => q.id),
   ]);
   const pool = QBANK.filter(q => target.includes(q.section) && !usedIds.has(q.id));
-  retestQuestions = pick(pool, Math.min(RETEST_SIZE, pool.length));
+  retestQuestions = pick(pool, Math.min(RETEST_SIZE, pool.length)).map(shuffleChoices);
   if (retestQuestions.length === 0) {
     document.getElementById('retestArea').innerHTML = '<div class="card"><p style="color:var(--muted); font-size:14px;">再テスト用の新しい問題がありません。</p></div>';
     return;
@@ -765,6 +847,7 @@ function loadRetest() {
 
 function renderRetestQ() {
   retestAnswered = false;
+  retestStartTime = Date.now();
   const q = retestQuestions[retestQ];
   const keys = ['A','B','C','D'];
   const passHtml = q.passage ? `<div class="q-passage">${escapeHtml(q.passage)}</div>` : '';
@@ -783,7 +866,6 @@ function renderRetestQ() {
       ${passHtml}
       <div class="q-text">${qText}</div>
       <div class="choices">${choicesHtml}</div>
-      <div class="exp-box" id="rtExp"></div>
     </div>`;
   document.getElementById('retestNav').style.display = 'flex';
   document.getElementById('retestNavLabel').textContent = `${retestQ + 1}問目`;
@@ -795,16 +877,11 @@ function selectRetest(idx) {
   if (retestAnswered) return;
   retestAnswered = true;
   retestAnswers[retestQ] = idx;
-  const q = retestQuestions[retestQ];
+  retestAnswerTimes[retestQ] = Date.now() - retestStartTime;
   document.querySelectorAll('#retestArea .choice').forEach((b, i) => {
     b.disabled = true;
-    if (i === q.answer) b.classList.add('correct');
-    else if (i === idx) b.classList.add('wrong');
+    if (i === idx) b.classList.add('selected');
   });
-  const box = document.getElementById('rtExp');
-  box.classList.add('show');
-  const ok = idx === q.answer;
-  box.innerHTML = `<div class="exp-result ${ok ? 'ok' : 'ng'}">${ok ? '✓ 正解！' : '✗ 不正解'}</div>${escapeHtml(q.explanation || '')}`;
 }
 
 function nextRetestQ() {
@@ -816,7 +893,27 @@ function nextRetestQ() {
 function showRetestResult() {
   const correct = retestAnswers.filter((a, i) => a === retestQuestions[i].answer).length;
   const pct = Math.round(correct / retestQuestions.length * 100);
-  saveRecord(pct + '点(再)', pct, retestQuestions.length);
+  const totalTime = retestAnswerTimes.reduce((a, b) => a + (b || 0), 0);
+  saveRecord('retest', pct, retestQuestions.length, totalTime);
+
+  let reviewHtml = '';
+  retestQuestions.forEach((q, i) => {
+    const ok = retestAnswers[i] === q.answer;
+    const t = retestAnswerTimes[i] || 0;
+    const qText = (q.text || '').replace('___', '＿＿＿').substring(0, 80) + '...';
+    const yourPick = retestAnswers[i] != null ? q.choices[retestAnswers[i]] : '未回答';
+    const note = ok
+      ? '✓ 正解'
+      : `<div style="margin-top:6px; font-size:12px; color:var(--muted); line-height:1.6;">あなたの回答: ${escapeHtml(yourPick)} ／ 正解: <b>${escapeHtml(q.choices[q.answer])}</b></div>
+         <div style="margin-top:6px; padding:8px 10px; background:var(--bg); border-radius:6px; font-size:12px; line-height:1.6;">
+           💛 ${escapeHtml(kindWord(i))}<br>${escapeHtml(q.explanation || '')}
+         </div>`;
+    reviewHtml += `<div class="review-item">
+      <div class="review-q">Q${i+1}. ${escapeHtml(qText)} <span style="color:var(--muted); font-size:11px; font-weight:400;">[${fmtSec(t)}]</span></div>
+      <div class="review-answer ${ok ? 'review-correct' : 'review-wrong'}">${note}</div>
+    </div>`;
+  });
+
   document.getElementById('retestNav').style.display = 'none';
   document.getElementById('retestArea').innerHTML = `
     <div class="card">
@@ -828,34 +925,120 @@ function showRetestResult() {
       <div class="score-grid" style="margin-top:16px;">
         <div class="score-cell"><div class="score-cell-label">正解数</div><div class="score-cell-val ${pct>=70?'green':'amber'}">${correct}</div></div>
         <div class="score-cell"><div class="score-cell-label">正答率</div><div class="score-cell-val ${pct>=70?'green':'amber'}">${pct}%</div></div>
-        <div class="score-cell"><div class="score-cell-label">判定</div><div class="score-cell-val ${pct>=70?'green':'amber'}" style="font-size:16px;">${pct>=70?'合格圏':'要継続'}</div></div>
+        <div class="score-cell"><div class="score-cell-label">合計時間</div><div class="score-cell-val" style="font-size:18px;">${fmtSec(totalTime)}</div></div>
       </div>
-      <div style="display:flex; gap:10px; margin-top:16px; flex-wrap:wrap;">
-        <button class="btn" style="flex:1;" onclick="showHome()">🏠 ホームへ</button>
-        <button class="btn btn-primary" style="flex:1;" onclick="goPhase(1, true)">次のテストへ →</button>
-      </div>
+    </div>
+    <div class="card card-sm">
+      <div style="font-size:12px; color:var(--muted); font-weight:500; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:14px;">問題ごとの正誤</div>
+      <div>${reviewHtml}</div>
+    </div>
+    <div style="display:flex; gap:10px; margin-top:16px; flex-wrap:wrap;">
+      <button class="btn" style="flex:1;" onclick="showHome()">🏠 ホームへ</button>
+      <button class="btn btn-primary" style="flex:1;" onclick="goPhase(1, true)">次のテストへ →</button>
     </div>`;
 }
 
-// ─── History modal ────────────────────────────────────────────────────────────
-function showHistory() {
+// ─── History (calendar) ──────────────────────────────────────────────────────
+let calMonthOffset = 0; // 0 = current month, -1 = previous, etc.
+
+function aggregateHistoryByDate() {
   const history = JSON.parse(localStorage.getItem('eiken_history') || '[]');
-  let html = '';
-  if (history.length === 0) {
-    html = '<div class="empty">まだ記録がありません</div>';
-  } else {
-    history.forEach(h => {
-      const cls = h.pct >= 70 ? 'success' : h.pct >= 50 ? 'text' : 'danger';
-      html += `<div class="history-item">
-        <span class="history-date">${h.date}</span>
-        <span class="history-score" style="color:var(--${cls})">${h.score}</span>
-      </div>`;
-    });
+  const map = {}; // 'YYYY-M-D' → { mock: [pct...], retest: [pct...] }
+  for (const h of history) {
+    const d = new Date(h.ts || Date.now());
+    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    if (!map[key]) map[key] = { mock: [], retest: [] };
+    // Migrate older records that used score string instead of kind
+    let kind = h.kind;
+    if (!kind && typeof h.score === 'string') {
+      kind = h.score.includes('再') ? 'retest' : 'mock';
+    }
+    if (kind === 'retest') map[key].retest.push(h.pct);
+    else map[key].mock.push(h.pct);
   }
-  document.getElementById('historyContent').innerHTML = html;
+  return map;
+}
+
+function showHistory() {
+  calMonthOffset = 0;
+  renderCalendar();
   document.getElementById('historyOverlay').style.display = 'flex';
 }
 function closeHistory() { document.getElementById('historyOverlay').style.display = 'none'; }
+
+function shiftMonth(delta) {
+  calMonthOffset += delta;
+  // Don't allow going into the future
+  if (calMonthOffset > 0) calMonthOffset = 0;
+  renderCalendar();
+}
+
+function renderCalendar() {
+  const today = new Date();
+  const target = new Date(today.getFullYear(), today.getMonth() + calMonthOffset, 1);
+  const year = target.getFullYear();
+  const month = target.getMonth(); // 0-11
+  const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const data = aggregateHistoryByDate();
+
+  const monthLabel = `${year}年 ${month + 1}月`;
+  const dayLabels = ['日','月','火','水','木','金','土'];
+
+  let cellsHtml = '';
+  // pad blanks before the 1st
+  for (let i = 0; i < firstDay; i++) cellsHtml += `<div class="cal-cell empty"></div>`;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const key = `${year}-${month}-${d}`;
+    const rec = data[key];
+    const isToday = (year === today.getFullYear() && month === today.getMonth() && d === today.getDate());
+    let inner = `<div class="cal-day-num">${d}</div>`;
+    if (rec) {
+      if (rec.mock.length) {
+        const best = Math.max(...rec.mock);
+        const cls = best >= 70 ? 'cal-mock-good' : best >= 50 ? 'cal-mock-mid' : 'cal-mock-low';
+        inner += `<div class="cal-score ${cls}" title="模擬テスト">模 ${best}</div>`;
+      }
+      if (rec.retest.length) {
+        const best = Math.max(...rec.retest);
+        const cls = best >= 70 ? 'cal-retest-good' : best >= 50 ? 'cal-retest-mid' : 'cal-retest-low';
+        inner += `<div class="cal-score ${cls}" title="再テスト">再 ${best}</div>`;
+      }
+    }
+    cellsHtml += `<div class="cal-cell ${isToday ? 'is-today' : ''} ${rec ? 'has-data' : ''}">${inner}</div>`;
+  }
+
+  // Stats summary for the month
+  let monthMockCount = 0, monthRetestCount = 0, monthMockBest = 0, monthRetestBest = 0;
+  for (const k in data) {
+    const [y, m] = k.split('-').map(Number);
+    if (y === year && m === month) {
+      monthMockCount += data[k].mock.length;
+      monthRetestCount += data[k].retest.length;
+      if (data[k].mock.length) monthMockBest = Math.max(monthMockBest, ...data[k].mock);
+      if (data[k].retest.length) monthRetestBest = Math.max(monthRetestBest, ...data[k].retest);
+    }
+  }
+
+  const isCurrent = calMonthOffset === 0;
+  const html = `
+    <div class="cal-header">
+      <button class="btn" style="padding:5px 10px; font-size:13px;" onclick="shiftMonth(-1)">← 前月</button>
+      <div style="font-family:var(--serif); font-size:18px;">${monthLabel}</div>
+      <button class="btn" style="padding:5px 10px; font-size:13px;" onclick="shiftMonth(1)" ${isCurrent ? 'disabled' : ''}>翌月 →</button>
+    </div>
+    <div class="cal-weekheader">
+      ${dayLabels.map((l,i) => `<div class="cal-wlabel" style="color:${i===0?'#C03A2B':i===6?'#2C5F8A':'var(--muted)'}">${l}</div>`).join('')}
+    </div>
+    <div class="cal-grid">${cellsHtml}</div>
+    <div class="cal-summary">
+      <div><span class="cal-legend cal-mock-good"></span>模＝模擬テスト　<span class="cal-legend cal-retest-good"></span>再＝再テスト</div>
+      <div style="margin-top:6px; font-size:12px; color:var(--muted);">
+        ${monthLabel}の活動: 模擬 ${monthMockCount}回（最高${monthMockBest||'—'}点）／ 再テスト ${monthRetestCount}回（最高${monthRetestBest||'—'}点）
+      </div>
+    </div>`;
+  document.getElementById('historyContent').innerHTML = html;
+}
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 showHome();
