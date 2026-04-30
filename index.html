@@ -420,12 +420,14 @@ function confirmExit() {
 
 // ─── Storage / streak / history ───────────────────────────────────────────────
 // kind: 'mock' | 'retest'
-function saveRecord(kind, pct, qCount, totalTimeMs) {
+// sectionBreak: { '語彙': {total, correct}, '文法': ..., '長文読解': ... }
+function saveRecord(kind, pct, qCount, totalTimeMs, sectionBreak) {
   const history = JSON.parse(localStorage.getItem('eiken_history') || '[]');
   history.unshift({
     date: new Date().toLocaleDateString('ja-JP'),
     kind, pct, qCount,
     timeMs: totalTimeMs || 0,
+    sec: sectionBreak || {},
     ts: Date.now(),
   });
   if (history.length > 200) history.length = 200;
@@ -653,15 +655,16 @@ function escapeHtml(s) {
 }
 
 function selectAnswer(idx) {
-  if (answered) return;
-  answered = true;
+  // Allow re-selection until "next" is pressed
+  if (userAnswers[currentQ] == null) {
+    // First selection — record initial answer time
+    userAnswerTimes[currentQ] = Date.now() - qStartTime;
+  }
   userAnswers[currentQ] = idx;
-  userAnswerTimes[currentQ] = Date.now() - qStartTime;
-  // Show only "selected" — no correct/wrong reveal until end
+  answered = true;
   const btns = document.querySelectorAll('#phase1 .choice');
   btns.forEach((b, i) => {
-    b.disabled = true;
-    if (i === idx) b.classList.add('selected');
+    b.classList.toggle('selected', i === idx);
   });
 }
 
@@ -728,7 +731,7 @@ function showResults() {
     .filter(([, d]) => Math.round(d.correct / d.total * 100) < 70)
     .map(([n]) => n);
 
-  saveRecord('mock', pct, questions.length, totalTime);
+  saveRecord('mock', pct, questions.length, totalTime, sectionStats);
 }
 
 // ─── ③ Weak Areas ─────────────────────────────────────────────────────────────
@@ -874,13 +877,13 @@ function renderRetestQ() {
 }
 
 function selectRetest(idx) {
-  if (retestAnswered) return;
-  retestAnswered = true;
+  if (retestAnswers[retestQ] == null) {
+    retestAnswerTimes[retestQ] = Date.now() - retestStartTime;
+  }
   retestAnswers[retestQ] = idx;
-  retestAnswerTimes[retestQ] = Date.now() - retestStartTime;
+  retestAnswered = true;
   document.querySelectorAll('#retestArea .choice').forEach((b, i) => {
-    b.disabled = true;
-    if (i === idx) b.classList.add('selected');
+    b.classList.toggle('selected', i === idx);
   });
 }
 
@@ -894,7 +897,14 @@ function showRetestResult() {
   const correct = retestAnswers.filter((a, i) => a === retestQuestions[i].answer).length;
   const pct = Math.round(correct / retestQuestions.length * 100);
   const totalTime = retestAnswerTimes.reduce((a, b) => a + (b || 0), 0);
-  saveRecord('retest', pct, retestQuestions.length, totalTime);
+  // Build per-section breakdown for this retest
+  const retestSec = {};
+  retestQuestions.forEach((q, i) => {
+    if (!retestSec[q.section]) retestSec[q.section] = { total: 0, correct: 0 };
+    retestSec[q.section].total++;
+    if (retestAnswers[i] === q.answer) retestSec[q.section].correct++;
+  });
+  saveRecord('retest', pct, retestQuestions.length, totalTime, retestSec);
 
   let reviewHtml = '';
   retestQuestions.forEach((q, i) => {
@@ -997,12 +1007,14 @@ function renderCalendar() {
       if (rec.mock.length) {
         const best = Math.max(...rec.mock);
         const cls = best >= 70 ? 'cal-mock-good' : best >= 50 ? 'cal-mock-mid' : 'cal-mock-low';
-        inner += `<div class="cal-score ${cls}" title="模擬テスト">模 ${best}</div>`;
+        const cnt = rec.mock.length > 1 ? `×${rec.mock.length}` : '';
+        inner += `<div class="cal-score ${cls}" title="模擬テスト ${rec.mock.length}回 / 最高${best}点">模 ${best}${cnt}</div>`;
       }
       if (rec.retest.length) {
         const best = Math.max(...rec.retest);
         const cls = best >= 70 ? 'cal-retest-good' : best >= 50 ? 'cal-retest-mid' : 'cal-retest-low';
-        inner += `<div class="cal-score ${cls}" title="再テスト">再 ${best}</div>`;
+        const cnt = rec.retest.length > 1 ? `×${rec.retest.length}` : '';
+        inner += `<div class="cal-score ${cls}" title="再テスト ${rec.retest.length}回 / 最高${best}点">再 ${best}${cnt}</div>`;
       }
     }
     cellsHtml += `<div class="cal-cell ${isToday ? 'is-today' : ''} ${rec ? 'has-data' : ''}">${inner}</div>`;
@@ -1032,12 +1044,127 @@ function renderCalendar() {
     </div>
     <div class="cal-grid">${cellsHtml}</div>
     <div class="cal-summary">
-      <div><span class="cal-legend cal-mock-good"></span>模＝模擬テスト　<span class="cal-legend cal-retest-good"></span>再＝再テスト</div>
+      <div><span class="cal-legend cal-mock-good"></span>模＝模擬テスト　<span class="cal-legend cal-retest-good"></span>再＝再テスト　（×Nは1日の受験回数）</div>
       <div style="margin-top:6px; font-size:12px; color:var(--muted);">
         ${monthLabel}の活動: 模擬 ${monthMockCount}回（最高${monthMockBest||'—'}点）／ 再テスト ${monthRetestCount}回（最高${monthRetestBest||'—'}点）
       </div>
+    </div>
+    <div style="margin-top:20px; padding-top:16px; border-top:1px solid var(--border);">
+      <div style="font-family:var(--serif); font-size:16px; margin-bottom:6px;">分野別 正答率の推移</div>
+      <div style="font-size:11px; color:var(--muted); margin-bottom:10px;">直近14日（模擬・再テスト合算）</div>
+      ${renderSectionTrendSVG()}
     </div>`;
   document.getElementById('historyContent').innerHTML = html;
+}
+
+// Build a 14-day section accuracy trend SVG.
+function renderSectionTrendSVG() {
+  const history = JSON.parse(localStorage.getItem('eiken_history') || '[]');
+  // Aggregate per date per section
+  const byDate = {}; // 'YYYY-M-D' → { '語彙': {total, correct}, ... }
+  for (const h of history) {
+    const sec = h.sec || {};
+    const d = new Date(h.ts || Date.now());
+    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    if (!byDate[key]) byDate[key] = {};
+    for (const sname of Object.keys(sec)) {
+      if (!byDate[key][sname]) byDate[key][sname] = { total: 0, correct: 0 };
+      byDate[key][sname].total += sec[sname].total || 0;
+      byDate[key][sname].correct += sec[sname].correct || 0;
+    }
+  }
+
+  // Build last 14 days array
+  const today = new Date();
+  const days = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(today); d.setDate(today.getDate() - i);
+    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    days.push({ d, key, label: `${d.getMonth()+1}/${d.getDate()}` });
+  }
+
+  const sections = [
+    { name: '語彙', color: '#2C5F8A' },
+    { name: '文法', color: '#2A7D55' },
+    { name: '長文読解', color: '#B86A00' },
+  ];
+
+  const W = 600, H = 200, pad = { l: 32, r: 12, t: 12, b: 28 };
+  const innerW = W - pad.l - pad.r;
+  const innerH = H - pad.t - pad.b;
+  const xStep = innerW / Math.max(1, days.length - 1);
+
+  // Y axis ticks: 0,25,50,75,100
+  let axisH = '';
+  for (let v of [0,25,50,75,100]) {
+    const y = pad.t + innerH - (v / 100) * innerH;
+    axisH += `<line x1="${pad.l}" y1="${y}" x2="${W - pad.r}" y2="${y}" stroke="#E8E4DC" stroke-width="1" stroke-dasharray="${v===0?'':'2,3'}"/>
+              <text x="${pad.l - 6}" y="${y + 3}" text-anchor="end" font-size="10" fill="#888880">${v}</text>`;
+  }
+
+  // X axis labels
+  let xLabels = '';
+  days.forEach((d, i) => {
+    if (i % 2 === 0 || i === days.length - 1) {
+      const x = pad.l + i * xStep;
+      xLabels += `<text x="${x}" y="${H - 8}" text-anchor="middle" font-size="9" fill="#888880">${d.label}</text>`;
+    }
+  });
+
+  let lines = '';
+  let dots = '';
+  let hasData = false;
+  for (const s of sections) {
+    const pts = days.map((d, i) => {
+      const data = byDate[d.key]?.[s.name];
+      if (!data || data.total === 0) return null;
+      hasData = true;
+      const pct = data.correct / data.total * 100;
+      return { x: pad.l + i * xStep, y: pad.t + innerH - (pct / 100) * innerH, pct: Math.round(pct), i };
+    });
+
+    // Draw segments only between non-null adjacent points
+    let path = '';
+    let prev = null;
+    for (const p of pts) {
+      if (p) {
+        if (prev) path += `M${prev.x},${prev.y} L${p.x},${p.y} `;
+        prev = p;
+      } else {
+        prev = null; // gap
+      }
+    }
+    lines += `<path d="${path}" stroke="${s.color}" stroke-width="2" fill="none" stroke-linecap="round"/>`;
+    for (const p of pts) {
+      if (p) {
+        dots += `<circle cx="${p.x}" cy="${p.y}" r="3" fill="${s.color}">
+          <title>${s.name} ${days[p.i].label}: ${p.pct}%</title>
+        </circle>`;
+      }
+    }
+  }
+
+  const legend = sections.map((s, i) =>
+    `<span style="display:inline-flex; align-items:center; gap:4px; margin-right:12px; font-size:12px;">
+      <span style="display:inline-block; width:14px; height:3px; background:${s.color}; border-radius:2px;"></span>${s.name}
+    </span>`).join('');
+
+  if (!hasData) {
+    return `<div style="text-align:center; padding:24px; color:var(--muted); font-size:13px; background:var(--bg); border-radius:8px;">
+      まだデータがありません。テストを受けると分野別の正答率が記録されます。
+    </div>`;
+  }
+
+  return `
+    <div style="overflow-x:auto;">
+      <svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet" style="display:block; min-width:480px;">
+        ${axisH}
+        ${lines}
+        ${dots}
+        ${xLabels}
+      </svg>
+    </div>
+    <div style="text-align:center; margin-top:6px;">${legend}</div>`;
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
