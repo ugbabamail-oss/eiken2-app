@@ -185,8 +185,9 @@
 <div class="app">
 
   <div class="topbar">
-    <div class="topbar-logo">英検<span>2級</span> 学習</div>
+    <button class="topbar-logo" id="topbarLogo" onclick="goHomeFromAnywhere()" style="background:none; border:none; cursor:pointer; padding:0; font-family:var(--serif); font-size:20px; letter-spacing:-0.3px; color:var(--text);">英検<span>2級</span> 学習</button>
     <div class="topbar-right">
+      <button class="btn" id="homeBtnTop" style="font-size:12px; padding:5px 12px; display:none;" onclick="goHomeFromAnywhere()">🏠 ホーム</button>
       <div class="streak-badge">🔥 <span class="streak-num" id="streakNum">0</span>日連続</div>
       <button class="btn" style="font-size:12px; padding:5px 12px;" onclick="showHistory()">📊 記録</button>
     </div>
@@ -234,17 +235,7 @@
 
     <div class="streak-message" id="streakMsg"></div>
 
-    <div class="card card-sm" style="margin-bottom:12px;">
-      <div style="font-size:12px; color:var(--muted); margin-bottom:8px;">出題数</div>
-      <div class="session-options">
-        <button class="session-pill" data-n="5" onclick="setSessionSize(5)">5問</button>
-        <button class="session-pill active" data-n="10" onclick="setSessionSize(10)">10問</button>
-        <button class="session-pill" data-n="20" onclick="setSessionSize(20)">20問</button>
-        <button class="session-pill" data-n="30" onclick="setSessionSize(30)">30問</button>
-      </div>
-    </div>
-
-    <button class="start-btn-big" onclick="startFromHome()">✏️ 今日のテストをはじめる</button>
+    <button class="start-btn-big" onclick="startFromHome()">✏️ 今日のテストをはじめる（10問）</button>
 
     <div style="text-align:center; margin-bottom: 16px;">
       <button class="btn" style="font-size:12px; padding:5px 14px;" onclick="showHistory()">📊 これまでの記録を見る</button>
@@ -358,7 +349,9 @@ let retestQuestions = [];
 let retestAnswers = [];
 let retestQ = 0;
 let retestAnswered = false;
-let sessionSize = parseInt(localStorage.getItem('eiken_session_size') || '10', 10);
+const TEST_SIZE = 10;
+const TRAIN_SIZE = 5;
+const RETEST_SIZE = 5;
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 function shuffle(arr) {
@@ -372,12 +365,11 @@ function shuffle(arr) {
 function pick(arr, n) { return shuffle(arr).slice(0, n); }
 function bySection(name) { return QBANK.filter(q => q.section === name); }
 
-function setSessionSize(n) {
-  sessionSize = n;
-  localStorage.setItem('eiken_session_size', String(n));
-  document.querySelectorAll('.session-pill').forEach(p => {
-    p.classList.toggle('active', parseInt(p.dataset.n, 10) === n);
-  });
+function confirmExit() {
+  if (currentQ > 0 || answered || retestQ > 0 || retestAnswered) {
+    return confirm('進行中のテストがあります。ホームに戻りますか？（途中の解答は保存されません）');
+  }
+  return true;
 }
 
 // ─── Storage / streak / history ───────────────────────────────────────────────
@@ -503,10 +495,6 @@ function renderHome() {
   renderCountdown();
   renderWeekGrid();
   renderStreakMessage();
-  // session size pills
-  document.querySelectorAll('.session-pill').forEach(p => {
-    p.classList.toggle('active', parseInt(p.dataset.n, 10) === sessionSize);
-  });
 }
 
 function showHome() {
@@ -514,7 +502,15 @@ function showHome() {
   document.getElementById('phaseHome').classList.add('active');
   document.getElementById('stepBar').style.display = 'none';
   document.getElementById('progressWrap').style.display = 'none';
+  document.getElementById('homeBtnTop').style.display = 'none';
+  // reset transient state
+  currentQ = 0; userAnswers = []; answered = false;
+  retestQ = 0; retestAnswers = []; retestAnswered = false;
   renderHome();
+}
+
+function goHomeFromAnywhere() {
+  if (confirmExit()) showHome();
 }
 
 function startFromHome() {
@@ -530,6 +526,7 @@ function goPhase(n, restart) {
   document.getElementById(phaseIds[n] || ('phase' + n)).classList.add('active');
   document.getElementById('stepBar').style.display = 'flex';
   document.getElementById('progressWrap').style.display = 'block';
+  document.getElementById('homeBtnTop').style.display = 'inline-block';
 
   ['step1','step2','step3','step4','step5'].forEach((id, i) => {
     const el = document.getElementById(id);
@@ -550,7 +547,7 @@ function goPhase(n, restart) {
 function initTest(_restart) {
   currentQ = 0; userAnswers = []; answered = false;
   // Compose a balanced random selection from all sections
-  const N = sessionSize;
+  const N = TEST_SIZE;
   const vocab = bySection('語彙');
   const gram = bySection('文法');
   const read = bySection('長文読解');
@@ -710,7 +707,7 @@ function loadTraining() {
   // pick 5 NEW questions from target sections (excluding ones from the test)
   const usedIds = new Set(questions.map(q => q.id));
   const pool = QBANK.filter(q => target.includes(q.section) && !usedIds.has(q.id));
-  trainQuestions = pick(pool, Math.min(5, pool.length));
+  trainQuestions = pick(pool, Math.min(TRAIN_SIZE, pool.length));
 
   let html = '';
   trainQuestions.forEach((q, i) => {
@@ -758,7 +755,7 @@ function loadRetest() {
     ...trainQuestions.map(q => q.id),
   ]);
   const pool = QBANK.filter(q => target.includes(q.section) && !usedIds.has(q.id));
-  retestQuestions = pick(pool, Math.min(5, pool.length));
+  retestQuestions = pick(pool, Math.min(RETEST_SIZE, pool.length));
   if (retestQuestions.length === 0) {
     document.getElementById('retestArea').innerHTML = '<div class="card"><p style="color:var(--muted); font-size:14px;">再テスト用の新しい問題がありません。</p></div>';
     return;
