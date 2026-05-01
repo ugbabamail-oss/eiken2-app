@@ -10,15 +10,19 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg: #F7F5F0; --surface: #FFFFFF; --text: #1A1A1A; --muted: #888880;
-    --accent: #2C5F8A; --accent-light: #EBF2F9;
-    --success: #2A7D55; --success-light: #EAF5EE;
-    --danger: #C03A2B; --danger-light: #FAECEA;
-    --border: #E8E4DC;
+    --bg: #F0F7FF; --surface: #FFFFFF; --text: #1A2540; --muted: #7F92AD;
+    --accent: #1E88E5; --accent-2: #1565C0; --accent-light: #E3F2FD;
+    --success: #00BFA5; --success-light: #E0F7F4;
+    --danger: #E53935; --danger-light: #FFEBEE;
+    --warn: #FB8C00; --warn-light: #FFF3E0;
+    --border: #DCEAF7;
     --serif: 'DM Serif Display', Georgia, serif;
     --sans: 'DM Sans', system-ui, sans-serif;
-    --radius: 12px;
+    --radius: 16px;
+    --shadow-sm: 0 2px 6px rgba(30,136,229,0.08);
+    --shadow-md: 0 6px 20px rgba(30,136,229,0.12);
   }
+  body { background: linear-gradient(180deg, #F0F7FF 0%, #E3F2FD 100%) fixed; }
 
   body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; font-size: 15px; line-height: 1.6; }
 
@@ -40,23 +44,23 @@
   .step.done .step-dot { background: var(--success); }
   .step-sep { flex: 1; height: 1px; background: var(--border); min-width: 8px; }
 
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 16px; box-shadow: var(--shadow-sm); }
   .card-sm { padding: 16px 20px; }
 
   .section-title { font-family: var(--serif); font-size: 22px; letter-spacing: -0.3px; margin-bottom: 4px; }
   .section-sub { font-size: 13px; color: var(--muted); margin-bottom: 24px; }
 
   .q-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-  .q-tag { font-size: 11px; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase; padding: 3px 10px; border-radius: 20px; background: var(--accent-light); color: var(--accent); }
+  .q-tag { font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; padding: 4px 12px; border-radius: 20px; background: linear-gradient(135deg, #E3F2FD, #BBDEFB); color: var(--accent); }
   .q-counter { font-size: 13px; color: var(--muted); }
   .q-text { font-size: 16px; line-height: 1.8; color: var(--text); margin-bottom: 20px; }
   .q-blank { display: inline-block; border-bottom: 2px solid var(--accent); min-width: 80px; text-align: center; padding: 0 6px; }
   .q-passage { background: var(--bg); border-left: 3px solid var(--accent); padding: 12px 16px; border-radius: 0 8px 8px 0; font-size: 14px; line-height: 1.8; color: var(--muted); margin-bottom: 16px; }
 
-  .choices { display: flex; flex-direction: column; gap: 8px; }
-  .choice { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 10px; border: 1px solid var(--border); cursor: pointer; background: var(--surface); font-size: 14px; color: var(--text); transition: all 0.15s; text-align: left; font-family: var(--sans); }
-  .choice:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-light); }
-  .choice-key { width: 26px; height: 26px; border-radius: 6px; background: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 500; color: var(--muted); flex-shrink: 0; transition: all 0.15s; }
+  .choices { display: flex; flex-direction: column; gap: 10px; }
+  .choice { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 14px; border: 2px solid var(--border); cursor: pointer; background: var(--surface); font-size: 14px; color: var(--text); transition: all 0.18s ease; text-align: left; font-family: var(--sans); }
+  .choice:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-light); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+  .choice-key { width: 28px; height: 28px; border-radius: 8px; background: var(--bg); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; color: var(--muted); flex-shrink: 0; transition: all 0.15s; }
   .choice.selected { border-color: var(--accent); background: var(--accent-light); }
   .choice.selected .choice-key { background: var(--accent); color: white; }
   .choice.correct { border-color: var(--success); background: var(--success-light); }
@@ -71,12 +75,12 @@
   .exp-result.ng { color: var(--danger); }
 
   .nav { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
-  .btn { padding: 10px 22px; border-radius: 8px; font-size: 14px; font-weight: 500; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; font-family: var(--sans); transition: all 0.15s; }
-  .btn:hover { background: var(--bg); }
-  .btn-primary { background: var(--accent); border-color: var(--accent); color: white; }
-  .btn-primary:hover { opacity: 0.9; }
-  .btn-success { background: var(--success); border-color: var(--success); color: white; }
-  .btn-success:hover { opacity: 0.9; }
+  .btn { padding: 10px 22px; border-radius: 12px; font-size: 14px; font-weight: 600; border: 2px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; font-family: var(--sans); transition: all 0.15s; }
+  .btn:hover:not(:disabled) { background: var(--bg); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+  .btn-primary { background: linear-gradient(135deg, #1E88E5 0%, #1565C0 100%); border-color: transparent; color: white; box-shadow: 0 4px 12px rgba(30,136,229,0.32); }
+  .btn-primary:hover:not(:disabled) { box-shadow: 0 6px 16px rgba(30,136,229,0.42); transform: translateY(-1px); }
+  .btn-success { background: linear-gradient(135deg, #00BFA5 0%, #1DE9B6 100%); border-color: transparent; color: white; box-shadow: 0 4px 12px rgba(0,191,165,0.30); }
+  .btn-success:hover:not(:disabled) { box-shadow: 0 6px 16px rgba(0,191,165,0.40); transform: translateY(-1px); }
 
   .score-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
   .score-cell { background: var(--bg); border-radius: 10px; padding: 16px; text-align: center; }
@@ -111,12 +115,12 @@
   .phase { display: none; }
   .phase.active { display: block; }
 
-  .home-hero { background: linear-gradient(135deg, #1a3a5c 0%, #2C5F8A 60%, #3d80b8 100%); border-radius: 20px; padding: 28px 24px; margin-bottom: 16px; color: white; position: relative; overflow: hidden; }
+  .home-hero { background: linear-gradient(135deg, #0D47A1 0%, #1976D2 50%, #29B6F6 100%); border-radius: 24px; padding: 28px 24px; margin-bottom: 16px; color: white; position: relative; overflow: hidden; box-shadow: 0 10px 30px rgba(25,118,210,0.30); }
   .home-hero::before { content: ''; position: absolute; top: -30px; right: -30px; width: 160px; height: 160px; border-radius: 50%; background: rgba(255,255,255,0.06); }
   .home-hero::after { content: ''; position: absolute; bottom: -50px; right: 40px; width: 100px; height: 100px; border-radius: 50%; background: rgba(255,255,255,0.04); }
   .home-greeting { font-size: 13px; opacity: 0.7; margin-bottom: 2px; letter-spacing: 0.3px; position: relative; }
   .home-title { font-family: var(--serif); font-size: 26px; margin-bottom: 20px; position: relative; }
-  .home-title span { color: #7EC8FF; }
+  .home-title span { color: #FFD54F; }
   .countdown-box { background: rgba(255,255,255,0.12); border-radius: 14px; padding: 16px 20px; margin-bottom: 4px; backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.15); position: relative; }
   .countdown-label { font-size: 11px; opacity: 0.7; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
   .countdown-num { font-family: var(--serif); font-size: 52px; line-height: 1; color: #fff; display: flex; align-items: baseline; gap: 6px; }
@@ -132,28 +136,38 @@
   .date-input:focus { border-color: rgba(255,255,255,0.6); }
   .date-save-btn { padding: 10px 16px; background: white; color: #2C5F8A; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; font-family: var(--sans); white-space: nowrap; }
 
-  .home-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
-  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px; text-align: center; position: relative; overflow: hidden; }
-  .stat-card::before { content: attr(data-emoji); position: absolute; top: 8px; right: 12px; font-size: 28px; opacity: 0.12; }
-  .stat-card-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
-  .stat-card-val { font-family: var(--serif); font-size: 36px; color: var(--text); line-height: 1; }
-  .stat-card-unit { font-size: 13px; color: var(--muted); margin-top: 2px; }
-  .stat-card.fire .stat-card-val { color: #E8700A; }
-  .stat-card.star .stat-card-val { color: #2C5F8A; }
+  .home-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .stat-card { background: var(--surface); border: 2px solid var(--border); border-radius: 16px; padding: 14px; text-align: center; position: relative; overflow: hidden; box-shadow: var(--shadow-sm); }
+  .stat-card.fire   { background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%); border-color: #FFCC80; }
+  .stat-card.time   { background: linear-gradient(135deg, #E1F5FE 0%, #B3E5FC 100%); border-color: #81D4FA; }
+  .stat-card.mock   { background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%); border-color: #90CAF9; }
+  .stat-card.retest { background: linear-gradient(135deg, #E0F7F4 0%, #B2DFDB 100%); border-color: #80CBC4; }
+  .stat-card::before { content: attr(data-emoji); position: absolute; top: 6px; right: 10px; font-size: 26px; opacity: 0.22; }
+  .stat-card-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; font-weight: 600; }
+  .stat-card-val { font-family: var(--serif); font-size: 30px; color: var(--text); line-height: 1; }
+  .stat-card-unit { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .stat-card.fire   .stat-card-val { color: #F57C00; }
+  .stat-card.time   .stat-card-val { color: #0288D1; }
+  .stat-card.mock   .stat-card-val { color: #1565C0; }
+  .stat-card.retest .stat-card-val { color: #00796B; }
 
   .streak-message { background: #FFF8EC; border: 1px solid #FFD88A; border-radius: 12px; padding: 12px 16px; font-size: 13px; color: #7A4900; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
   .streak-message.hidden { display: none; }
 
-  .start-btn-big { width: 100%; padding: 16px; background: #2C5F8A; border: none; border-radius: 14px; color: white; font-size: 18px; font-weight: 500; font-family: var(--serif); cursor: pointer; letter-spacing: 0.3px; transition: all 0.15s; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; }
-  .start-btn-big:hover { background: #1a3a5c; transform: translateY(-1px); }
+  .start-btn-big { width: 100%; padding: 18px; background: linear-gradient(135deg, #1976D2 0%, #1E88E5 50%, #29B6F6 100%); border: none; border-radius: 18px; color: white; font-size: 18px; font-weight: 600; font-family: var(--sans); cursor: pointer; letter-spacing: 0.3px; transition: all 0.2s; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 8px 24px rgba(30,136,229,0.32); }
+  .start-btn-big:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(30,136,229,0.42); }
   .start-btn-big:active { transform: translateY(0); }
 
-  .week-grid { display: flex; gap: 6px; justify-content: center; margin: 4px 0 8px; }
-  .week-day { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-  .week-day-label { font-size: 10px; color: var(--muted); }
+  .week-grid { display: flex; gap: 8px; justify-content: space-between; margin: 4px 0 8px; align-items: flex-end; }
+  .week-day { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; }
+  .week-day-label { font-size: 10px; color: var(--muted); font-weight: 600; }
   .week-day-dot { width: 28px; height: 28px; border-radius: 8px; background: var(--border); display: flex; align-items: center; justify-content: center; font-size: 14px; }
-  .week-day-dot.done { background: #2C5F8A; }
-  .week-day-dot.today { background: #E8700A; }
+  .week-day-dot.done { background: linear-gradient(135deg,#00BFA5,#1DE9B6); color:white; }
+  .week-day-dot.today { background: linear-gradient(135deg,#FB8C00,#FFB74D); color:white; box-shadow:0 4px 8px rgba(251,140,0,0.30); }
+  .week-day-dot.future { background: #F1F5F9; opacity: 0.5; }
+  .week-day-bar-wrap { width: 100%; max-width: 24px; height: 36px; display: flex; align-items: flex-end; justify-content: center; }
+  .week-day-bar { width: 100%; background: linear-gradient(180deg, #4FC3F7, #1E88E5); border-radius: 4px 4px 2px 2px; min-width: 8px; transition: height 0.4s ease; }
+  .week-day-time { font-size: 9px; color: var(--accent); font-weight: 600; min-height: 12px; }
 
   .phase-label { font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 6px; }
 
@@ -238,10 +252,20 @@
         <div class="stat-card-val" id="homeStreakNum">0</div>
         <div class="stat-card-unit">日連続！</div>
       </div>
-      <div class="stat-card star" data-emoji="⭐">
-        <div class="stat-card-label">これまでのテスト</div>
-        <div class="stat-card-val" id="homeTotalTests">0</div>
-        <div class="stat-card-unit">回チャレンジ</div>
+      <div class="stat-card time" data-emoji="⏱">
+        <div class="stat-card-label">総学習時間</div>
+        <div class="stat-card-val" id="homeTotalTime">0</div>
+        <div class="stat-card-unit" id="homeTotalTimeUnit">分</div>
+      </div>
+      <div class="stat-card mock" data-emoji="📝">
+        <div class="stat-card-label">模擬テスト</div>
+        <div class="stat-card-val" id="homeMockCount">0</div>
+        <div class="stat-card-unit">回</div>
+      </div>
+      <div class="stat-card retest" data-emoji="🔄">
+        <div class="stat-card-label">再テスト</div>
+        <div class="stat-card-val" id="homeRetestCount">0</div>
+        <div class="stat-card-unit">回</div>
       </div>
     </div>
 
@@ -390,9 +414,18 @@ const KIND_WORDS = [
 function kindWord(i) { return KIND_WORDS[i % KIND_WORDS.length]; }
 function fmtSec(ms) { return Math.max(0, Math.round(ms / 1000)) + '秒'; }
 
-// Build the rich "wrong answer" feedback block.
-// Shows: your pick + meaning + why it's wrong, then correct + meaning + why it's right.
-function buildWrongExplanation(q, pickedIdx, qIdx) {
+const NICE_WORDS = [
+  '🌟 さすが！',
+  '🎯 ばっちり！',
+  '✨ いいね！この調子！',
+  '🏆 完璧！',
+  '🎉 ナイス！',
+  '💯 やったね！',
+];
+function niceWord(i) { return NICE_WORDS[i % NICE_WORDS.length]; }
+
+// Build the rich feedback block (works for both correct and wrong answers).
+function buildExplanation(q, pickedIdx, qIdx, ok) {
   const yourPick = pickedIdx != null ? q.choices[pickedIdx] : '未回答';
   const correct = q.choices[q.answer];
   const meanings = q.meanings || [];
@@ -411,19 +444,27 @@ function buildWrongExplanation(q, pickedIdx, qIdx) {
     corrLine = `<b style="color:var(--success);">正解:</b> ${escapeHtml(correct)}`;
     whyWrong = `「${escapeHtml(yourPick)}」は文法的にこの文では成立しません。文型・時制・態などのルールを確認しましょう。`;
   } else {
-    // 長文読解
     yourLine = `<b>あなたの回答:</b> ${escapeHtml(yourPick)}`;
     corrLine = `<b style="color:var(--success);">正解:</b> ${escapeHtml(correct)}`;
     whyWrong = `本文の該当箇所と一致しません。passage 中の根拠となる文を読み返してみましょう。`;
   }
 
+  if (ok) {
+    return `
+      <div style="margin-top:8px; padding:12px 14px; background:linear-gradient(135deg, #E0F7F4 0%, #F0FDFB 100%); border:1px solid #80CBC4; border-radius:10px; font-size:13px; color:#00695C; line-height:1.7;">
+        <div style="font-size:14px; font-weight:600; margin-bottom:6px;">✓ 正解！ ${niceWord(qIdx)}</div>
+        ${yourMean ? `<div style="font-size:12px; opacity:0.85;">${yourLine}</div>` : ''}
+        <div style="margin-top:6px;"><b>正解の理由:</b> ${escapeHtml(q.explanation || '')}</div>
+      </div>`;
+  }
+
   return `
     <div style="margin-top:6px; font-size:12px; color:var(--text); line-height:1.7;">${yourLine}</div>
     <div style="margin-top:2px; font-size:12px; line-height:1.7;">${corrLine}</div>
-    <div style="margin-top:8px; padding:10px 12px; background:#FFFBEC; border:1px solid #FFE7B0; border-radius:6px; font-size:12px; color:#7A4900; line-height:1.7;">
-      <div><b>なぜ違うか:</b> ${whyWrong}</div>
-      <div style="margin-top:6px;"><b>正解の理由:</b> ${escapeHtml(q.explanation || '')}</div>
-      <div style="margin-top:6px;">💛 ${escapeHtml(kindWord(qIdx))}</div>
+    <div style="margin-top:8px; padding:12px 14px; background:linear-gradient(135deg, #E3F2FD 0%, #F0F7FF 100%); border:1px solid #90CAF9; border-radius:10px; font-size:12px; color:#0D47A1; line-height:1.7;">
+      <div><b>❓ なぜ違うか:</b> ${whyWrong}</div>
+      <div style="margin-top:6px;"><b>💡 正解の理由:</b> ${escapeHtml(q.explanation || '')}</div>
+      <div style="margin-top:6px;">💙 ${escapeHtml(kindWord(qIdx))}</div>
     </div>`;
 }
 
@@ -540,22 +581,51 @@ function clearExamDate() { localStorage.removeItem('eiken_exam_date'); renderCou
 // ─── Week grid ────────────────────────────────────────────────────────────────
 function renderWeekGrid() {
   const history = JSON.parse(localStorage.getItem('eiken_history') || '[]');
-  const doneDays = new Set(history.map(h => h.date));
-  const today = new Date();
-  const dayLabels = ['日','月','火','水','木','金','土'];
-  let html = '';
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(today); d.setDate(today.getDate() - i);
-    const dateStr = d.toLocaleDateString('ja-JP');
-    const isToday = i === 0;
-    const isDone = doneDays.has(dateStr);
-    const dotClass = isToday && isDone ? 'done today' : isToday ? 'today' : isDone ? 'done' : '';
-    const emoji = isDone ? '⭐' : isToday ? '👆' : '';
-    html += `<div class="week-day">
-      <div class="week-day-label">${dayLabels[d.getDay()]}</div>
-      <div class="week-day-dot ${dotClass}">${emoji}</div>
-    </div>`;
+  // Aggregate per date: { dateStr: { count, timeMs } }
+  const dateMap = {};
+  for (const h of history) {
+    const ds = h.date;
+    if (!dateMap[ds]) dateMap[ds] = { count: 0, timeMs: 0 };
+    dateMap[ds].count++;
+    dateMap[ds].timeMs += (h.timeMs || 0);
   }
+  const today = new Date();
+  // Start of this week = Monday
+  const dow = today.getDay(); // 0=Sun..6=Sat
+  const daysFromMon = (dow + 6) % 7; // Mon=0, Sun=6
+  const monday = new Date(today); monday.setDate(today.getDate() - daysFromMon);
+  const dayLabels = ['月','火','水','木','金','土','日'];
+
+  // Compute days + max time for bar normalization
+  const days = [];
+  let maxMs = 1; // avoid div0
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday); d.setDate(monday.getDate() + i);
+    const ds = d.toLocaleDateString('ja-JP');
+    const rec = dateMap[ds] || { count: 0, timeMs: 0 };
+    if (rec.timeMs > maxMs) maxMs = rec.timeMs;
+    days.push({ date: d, ds, rec, isToday: ds === today.toLocaleDateString('ja-JP'), isFuture: d > today && ds !== today.toLocaleDateString('ja-JP') });
+  }
+
+  let html = '';
+  days.forEach((info, i) => {
+    const { date, rec, isToday, isFuture } = info;
+    const done = rec.count > 0;
+    const dotClass = isToday && done ? 'done today' : isToday ? 'today' : done ? 'done' : (isFuture ? 'future' : '');
+    const emoji = done ? '⭐' : isToday ? '👆' : '';
+    // Bar height: 0 to 32px
+    const barH = rec.timeMs > 0 ? Math.max(4, Math.round((rec.timeMs / maxMs) * 32)) : 0;
+    const min = Math.round(rec.timeMs / 60000);
+    const barTitle = rec.timeMs > 0 ? `${dayLabels[i]}: ${min}分` : '';
+    html += `<div class="week-day">
+      <div class="week-day-label">${dayLabels[i]}</div>
+      <div class="week-day-dot ${dotClass}">${emoji}</div>
+      <div class="week-day-bar-wrap" title="${barTitle}">
+        <div class="week-day-bar" style="height:${barH}px;"></div>
+      </div>
+      <div class="week-day-time">${rec.timeMs > 0 ? min + '分' : ''}</div>
+    </div>`;
+  });
   document.getElementById('weekGrid').innerHTML = html;
 }
 
@@ -582,7 +652,28 @@ function renderStreakMessage() {
 function renderHome() {
   updateStreak();
   const history = JSON.parse(localStorage.getItem('eiken_history') || '[]');
-  document.getElementById('homeTotalTests').textContent = history.length;
+  // totals
+  let mockCount = 0, retestCount = 0, totalMs = 0;
+  for (const h of history) {
+    const k = h.kind || (typeof h.score === 'string' && h.score.includes('再') ? 'retest' : 'mock');
+    if (k === 'retest') retestCount++; else mockCount++;
+    totalMs += (h.timeMs || 0);
+  }
+  document.getElementById('homeMockCount').textContent = mockCount;
+  document.getElementById('homeRetestCount').textContent = retestCount;
+  // total time formatting
+  const totMin = Math.round(totalMs / 60000);
+  const valEl = document.getElementById('homeTotalTime');
+  const unitEl = document.getElementById('homeTotalTimeUnit');
+  if (totMin >= 60) {
+    const h = Math.floor(totMin / 60);
+    const m = totMin % 60;
+    valEl.textContent = h;
+    unitEl.textContent = m > 0 ? `時間 ${m}分` : '時間';
+  } else {
+    valEl.textContent = totMin;
+    unitEl.textContent = '分';
+  }
   renderCountdown();
   renderWeekGrid();
   renderStreakMessage();
@@ -749,9 +840,7 @@ function showResults() {
     const t = userAnswerTimes[i] || 0;
     totalTime += t;
     const qText = (q.text || '').replace('___', '＿＿＿').substring(0, 80) + '...';
-    const note = ok
-      ? '✓ 正解'
-      : buildWrongExplanation(q, userAnswers[i], i);
+    const note = buildExplanation(q, userAnswers[i], i, ok);
     reviewHtml += `<div class="review-item">
       <div class="review-q">Q${i+1}. ${escapeHtml(qText)} <span style="color:var(--muted); font-size:11px; font-weight:400;">[${fmtSec(t)}]</span></div>
       <div class="review-answer ${ok ? 'review-correct' : 'review-wrong'}">${note}</div>
@@ -826,11 +915,7 @@ function renderTrainArea(graded) {
     let expHtml = '';
     if (graded) {
       const ok = picked === q.answer;
-      expHtml = `<div class="exp-box show">
-        <div class="exp-result ${ok ? 'ok' : 'ng'}">${ok ? '✓ 正解！' : '✗ 不正解 — 正解: ' + escapeHtml(q.choices[q.answer])}</div>
-        ${!ok ? `<div style="margin-top:6px; padding:8px 10px; background:#FFFBEC; border-radius:6px; color:#7A4900;">💛 ${escapeHtml(kindWord(i))}</div>` : ''}
-        <div style="margin-top:6px;">${escapeHtml(q.explanation || '')}</div>
-      </div>`;
+      expHtml = buildExplanation(q, picked, i, ok);
     }
     html += `<div class="train-item">
       <div class="train-num">${q.section} — 問題${i+1}</div>
@@ -944,9 +1029,7 @@ function showRetestResult() {
     const ok = retestAnswers[i] === q.answer;
     const t = retestAnswerTimes[i] || 0;
     const qText = (q.text || '').replace('___', '＿＿＿').substring(0, 80) + '...';
-    const note = ok
-      ? '✓ 正解'
-      : buildWrongExplanation(q, retestAnswers[i], i);
+    const note = buildExplanation(q, retestAnswers[i], i, ok);
     reviewHtml += `<div class="review-item">
       <div class="review-q">Q${i+1}. ${escapeHtml(qText)} <span style="color:var(--muted); font-size:11px; font-weight:400;">[${fmtSec(t)}]</span></div>
       <div class="review-answer ${ok ? 'review-correct' : 'review-wrong'}">${note}</div>
