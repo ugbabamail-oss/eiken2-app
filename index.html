@@ -450,11 +450,12 @@ function buildExplanation(q, pickedIdx, qIdx, ok) {
   }
 
   if (ok) {
+    // For correct answers, also include the picked word's meaning (vocab) and full reason
     return `
+      <div style="margin-top:6px; font-size:12px; line-height:1.7;">${corrLine}</div>
       <div style="margin-top:8px; padding:12px 14px; background:linear-gradient(135deg, #E0F7F4 0%, #F0FDFB 100%); border:1px solid #80CBC4; border-radius:10px; font-size:13px; color:#00695C; line-height:1.7;">
         <div style="font-size:14px; font-weight:600; margin-bottom:6px;">✓ 正解！ ${niceWord(qIdx)}</div>
-        ${yourMean ? `<div style="font-size:12px; opacity:0.85;">${yourLine}</div>` : ''}
-        <div style="margin-top:6px;"><b>正解の理由:</b> ${escapeHtml(q.explanation || '')}</div>
+        <div style="margin-top:6px;"><b>💡 正解の理由:</b> ${escapeHtml(q.explanation || '')}</div>
       </div>`;
   }
 
@@ -1206,12 +1207,13 @@ function renderSectionTrendSVG() {
   const innerH = H - pad.t - pad.b;
   const xStep = innerW / Math.max(1, days.length - 1);
 
-  // Y axis ticks: 0,25,50,75,100
+  // Y axis ticks: 0,10,20,...,100 (every 10)
   let axisH = '';
-  for (let v of [0,25,50,75,100]) {
+  for (let v = 0; v <= 100; v += 10) {
     const y = pad.t + innerH - (v / 100) * innerH;
-    axisH += `<line x1="${pad.l}" y1="${y}" x2="${W - pad.r}" y2="${y}" stroke="#E8E4DC" stroke-width="1" stroke-dasharray="${v===0?'':'2,3'}"/>
-              <text x="${pad.l - 6}" y="${y + 3}" text-anchor="end" font-size="10" fill="#888880">${v}</text>`;
+    const isMajor = (v % 50 === 0); // 0, 50, 100 stronger
+    axisH += `<line x1="${pad.l}" y1="${y}" x2="${W - pad.r}" y2="${y}" stroke="${isMajor?'#B0CFE8':'#DCEAF7'}" stroke-width="${isMajor?1:0.6}" stroke-dasharray="${v===0?'':(isMajor?'':'2,3')}"/>
+              <text x="${pad.l - 6}" y="${y + 3}" text-anchor="end" font-size="9" fill="#7F92AD">${v}</text>`;
   }
 
   // X axis labels
