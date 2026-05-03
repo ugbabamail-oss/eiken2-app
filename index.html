@@ -278,6 +278,16 @@
 
     <button class="start-btn-big" onclick="startFromHome()">✏️ 今日のテストをはじめる（10問）</button>
 
+    <button class="card card-sm" id="notebookBtn" style="width:100%; text-align:left; cursor:pointer; border-left:4px solid #FB8C00; background:linear-gradient(135deg, #FFF8E1, #FFFBF0); margin-bottom:16px; border-color:#FFE082;" onclick="showNotebook()">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <div style="font-size:14px; font-weight:600; color:#7A4900;">📔 単語帳</div>
+          <div style="font-size:11px; color:var(--muted); margin-top:2px;" id="notebookSummary">まだ単語が登録されていません</div>
+        </div>
+        <div style="font-size:20px; color:#FB8C00;">→</div>
+      </div>
+    </button>
+
     <div style="text-align:center; margin-bottom: 16px;">
       <button class="btn" style="font-size:12px; padding:5px 14px;" onclick="showHistory()">📊 これまでの記録を見る</button>
     </div>
@@ -321,6 +331,16 @@
     <div class="nav">
       <button class="btn" onclick="goPhase(1, true)">← やり直す</button>
       <button class="btn btn-primary" onclick="goPhase(3)">苦手分析へ →</button>
+    </div>
+
+    <!-- Word check (20 questions) appended below results -->
+    <div class="card card-sm" style="margin-top:24px; border-left: 4px solid var(--accent);">
+      <div style="font-size:12px; color:var(--accent); font-weight:600; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">📚 単語チェック（20問）</div>
+      <div style="font-size:13px; color:var(--muted); margin-bottom:12px;">テストに出てきた単語と、単語帳の復習単語をチェックしましょう。分からない単語は「分からない」を選んでね。</div>
+      <div id="vocabCheckArea"></div>
+      <div id="vocabCheckNav" style="display:none; margin-top:12px;">
+        <button class="btn btn-primary" style="width:100%;" onclick="gradeVocabCheck()">答え合わせをする →</button>
+      </div>
     </div>
   </div>
 
@@ -375,6 +395,21 @@
     </div>
   </div>
 
+  <!-- Notebook Modal -->
+  <div id="notebookOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:100; align-items:flex-end; justify-content:center; padding:20px;">
+    <div style="background:var(--surface); border-radius:16px 16px 0 0; width:100%; max-width:680px; padding:24px; max-height:80vh; overflow-y:auto;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <span style="font-family:var(--serif); font-size:18px;">📔 単語帳</span>
+        <button class="btn" style="padding:5px 12px; font-size:12px;" onclick="closeNotebook()">✕ 閉じる</button>
+      </div>
+      <div style="font-size:12px; color:var(--muted); margin-bottom:14px;">
+        間違えた単語と「分からない」と答えた単語を集めています。<br>
+        テストや単語チェックで何度も出題されます。正解率が <b>75%</b> をこえると自動的に卒業します 🎓
+      </div>
+      <div id="notebookContent"></div>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -424,9 +459,42 @@ const NICE_WORDS = [
 ];
 function niceWord(i) { return NICE_WORDS[i % NICE_WORDS.length]; }
 
+// ─── Vocab notebook (spaced repetition) ──────────────────────────────────────
+// Storage shape: { "misplaced": { meaning: "置き忘れた", correct: 0, total: 0, addedAt: ts } }
+const NB_GRAD_THRESHOLD = 0.75; // accuracy to graduate
+const NB_MIN_ATTEMPTS = 4;       // minimum attempts before graduation eligible
+
+function getNotebook() {
+  return JSON.parse(localStorage.getItem('eiken_notebook') || '{}');
+}
+function saveNotebook(nb) {
+  localStorage.setItem('eiken_notebook', JSON.stringify(nb));
+}
+function notebookAdd(word, meaning) {
+  if (!word || !meaning) return;
+  const nb = getNotebook();
+  if (!nb[word]) nb[word] = { meaning, correct: 0, total: 0, addedAt: Date.now() };
+  saveNotebook(nb);
+}
+// Record an answer. correct=true increments total+correct; false only total. unknown also counts as total wrong.
+function notebookRecord(word, isCorrect) {
+  const nb = getNotebook();
+  if (!nb[word]) return; // not in notebook
+  nb[word].total += 1;
+  if (isCorrect) nb[word].correct += 1;
+  // graduate?
+  if (nb[word].total >= NB_MIN_ATTEMPTS && (nb[word].correct / nb[word].total) > NB_GRAD_THRESHOLD) {
+    delete nb[word];
+  }
+  saveNotebook(nb);
+}
+function notebookWords() { return Object.keys(getNotebook()); }
+function notebookSize() { return notebookWords().length; }
+
 // Build the rich feedback block (works for both correct and wrong answers).
+// Tone: kind, polite, written so an elementary-school student can follow.
 function buildExplanation(q, pickedIdx, qIdx, ok) {
-  const yourPick = pickedIdx != null ? q.choices[pickedIdx] : '未回答';
+  const yourPick = pickedIdx != null ? q.choices[pickedIdx] : '（えらんでいません）';
   const correct = q.choices[q.answer];
   const meanings = q.meanings || [];
   const yourMean = pickedIdx != null && meanings[pickedIdx] ? meanings[pickedIdx] : '';
@@ -434,38 +502,41 @@ function buildExplanation(q, pickedIdx, qIdx, ok) {
 
   let yourLine, corrLine, whyWrong;
   if (q.section === '語彙') {
-    yourLine = `<b>あなたの回答:</b> ${escapeHtml(yourPick)}${yourMean ? ' = ' + escapeHtml(yourMean) : ''}`;
-    corrLine = `<b style="color:var(--success);">正解:</b> ${escapeHtml(correct)}${corrMean ? ' = ' + escapeHtml(corrMean) : ''}`;
+    yourLine = `<b>えらんだ答え:</b> ${escapeHtml(yourPick)}${yourMean ? '（いみ: ' + escapeHtml(yourMean) + '）' : ''}`;
+    corrLine = `<b style="color:var(--success);">正しい答え:</b> ${escapeHtml(correct)}${corrMean ? '（いみ: ' + escapeHtml(corrMean) + '）' : ''}`;
     whyWrong = yourMean
-      ? `「${escapeHtml(yourPick)}」は${escapeHtml(yourMean)}という意味で、この文脈には合いません。`
-      : `「${escapeHtml(yourPick)}」はこの文脈に合いません。`;
+      ? `「${escapeHtml(yourPick)}」は『${escapeHtml(yourMean)}』というイミの言葉です。だから、このえい文の中に入れると、文の意味がうまくつながらないんだ。`
+      : `「${escapeHtml(yourPick)}」はこのえい文には合わない言葉だよ。`;
   } else if (q.section === '文法') {
-    yourLine = `<b>あなたの回答:</b> ${escapeHtml(yourPick)}`;
-    corrLine = `<b style="color:var(--success);">正解:</b> ${escapeHtml(correct)}`;
-    whyWrong = `「${escapeHtml(yourPick)}」は文法的にこの文では成立しません。文型・時制・態などのルールを確認しましょう。`;
+    yourLine = `<b>えらんだ答え:</b> ${escapeHtml(yourPick)}`;
+    corrLine = `<b style="color:var(--success);">正しい答え:</b> ${escapeHtml(correct)}`;
+    whyWrong = `「${escapeHtml(yourPick)}」だと、文のかたち（時間・主語と動詞・受け身などのルール）が合わなくて、英語として正しい形になりません。`;
   } else {
-    yourLine = `<b>あなたの回答:</b> ${escapeHtml(yourPick)}`;
-    corrLine = `<b style="color:var(--success);">正解:</b> ${escapeHtml(correct)}`;
-    whyWrong = `本文の該当箇所と一致しません。passage 中の根拠となる文を読み返してみましょう。`;
+    yourLine = `<b>えらんだ答え:</b> ${escapeHtml(yourPick)}`;
+    corrLine = `<b style="color:var(--success);">正しい答え:</b> ${escapeHtml(correct)}`;
+    whyWrong = `本文（パッセージ）の中に書いてあることと、ちょっとちがいます。もういちど英語の文をゆっくり読んでみよう。`;
   }
 
+  // Friendly "正解の理由" — wrap the original explanation in soft phrasing
+  const expRaw = q.explanation || '';
+  const reasonHtml = `<b>💡 正しい答えの理由:</b><br>${escapeHtml(expRaw)}<div style="margin-top:6px; font-size:11px; opacity:0.85;">この理由をしっかり覚えておくと、つぎ似た問題が出たときにすぐ正解できるよ ✨</div>`;
+
   if (ok) {
-    // For correct answers, also include the picked word's meaning (vocab) and full reason
     return `
-      <div style="margin-top:6px; font-size:12px; line-height:1.7;">${corrLine}</div>
-      <div style="margin-top:8px; padding:12px 14px; background:linear-gradient(135deg, #E0F7F4 0%, #F0FDFB 100%); border:1px solid #80CBC4; border-radius:10px; font-size:13px; color:#00695C; line-height:1.7;">
-        <div style="font-size:14px; font-weight:600; margin-bottom:6px;">✓ 正解！ ${niceWord(qIdx)}</div>
-        <div style="margin-top:6px;"><b>💡 正解の理由:</b> ${escapeHtml(q.explanation || '')}</div>
+      <div style="margin-top:6px; font-size:12px; line-height:1.8;">${corrLine}</div>
+      <div style="margin-top:8px; padding:12px 14px; background:linear-gradient(135deg, #E0F7F4 0%, #F0FDFB 100%); border:1px solid #80CBC4; border-radius:10px; font-size:13px; color:#00695C; line-height:1.8;">
+        <div style="font-size:14px; font-weight:600; margin-bottom:6px;">✅ せいかい！ ${niceWord(qIdx)}</div>
+        <div style="margin-top:6px;">${reasonHtml}</div>
       </div>`;
   }
 
   return `
-    <div style="margin-top:6px; font-size:12px; color:var(--text); line-height:1.7;">${yourLine}</div>
-    <div style="margin-top:2px; font-size:12px; line-height:1.7;">${corrLine}</div>
-    <div style="margin-top:8px; padding:12px 14px; background:linear-gradient(135deg, #E3F2FD 0%, #F0F7FF 100%); border:1px solid #90CAF9; border-radius:10px; font-size:12px; color:#0D47A1; line-height:1.7;">
-      <div><b>❓ なぜ違うか:</b> ${whyWrong}</div>
-      <div style="margin-top:6px;"><b>💡 正解の理由:</b> ${escapeHtml(q.explanation || '')}</div>
-      <div style="margin-top:6px;">💙 ${escapeHtml(kindWord(qIdx))}</div>
+    <div style="margin-top:6px; font-size:12px; color:var(--text); line-height:1.8;">${yourLine}</div>
+    <div style="margin-top:2px; font-size:12px; line-height:1.8;">${corrLine}</div>
+    <div style="margin-top:8px; padding:12px 14px; background:linear-gradient(135deg, #E3F2FD 0%, #F0F7FF 100%); border:1px solid #90CAF9; border-radius:10px; font-size:12px; color:#0D47A1; line-height:1.8;">
+      <div><b>❌ ちがった理由:</b><br>${whyWrong}</div>
+      <div style="margin-top:8px;">${reasonHtml}</div>
+      <div style="margin-top:8px; padding:6px 10px; background:#fff; border-radius:6px;">💙 ${escapeHtml(kindWord(qIdx))}</div>
     </div>`;
 }
 
@@ -500,18 +571,34 @@ function confirmExit() {
 // ─── Storage / streak / history ───────────────────────────────────────────────
 // kind: 'mock' | 'retest'
 // sectionBreak: { '語彙': {total, correct}, '文法': ..., '長文読解': ... }
-function saveRecord(kind, pct, qCount, totalTimeMs, sectionBreak) {
+// questionIds: array of QBANK ids used in this session (so we can skip yesterday's)
+function saveRecord(kind, pct, qCount, totalTimeMs, sectionBreak, questionIds) {
   const history = JSON.parse(localStorage.getItem('eiken_history') || '[]');
   history.unshift({
     date: new Date().toLocaleDateString('ja-JP'),
     kind, pct, qCount,
     timeMs: totalTimeMs || 0,
     sec: sectionBreak || {},
+    qids: questionIds || [],
     ts: Date.now(),
   });
   if (history.length > 200) history.length = 200;
   localStorage.setItem('eiken_history', JSON.stringify(history));
   updateStreak();
+}
+
+// Returns set of QBANK ids used yesterday (so we don't re-ask them today).
+function getYesterdayUsedIds() {
+  const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  const yKey = yesterday.toLocaleDateString('ja-JP');
+  const history = JSON.parse(localStorage.getItem('eiken_history') || '[]');
+  const ids = new Set();
+  for (const h of history) {
+    if (h.date === yKey && Array.isArray(h.qids)) {
+      h.qids.forEach(id => ids.add(id));
+    }
+  }
+  return ids;
 }
 function calcStreak() {
   const history = JSON.parse(localStorage.getItem('eiken_history') || '[]');
@@ -678,6 +765,7 @@ function renderHome() {
   renderCountdown();
   renderWeekGrid();
   renderStreakMessage();
+  refreshHomeNotebook();
 }
 
 function showHome() {
@@ -729,11 +817,17 @@ function goPhase(n, restart) {
 // ─── ① Mock Test ──────────────────────────────────────────────────────────────
 function initTest(_restart) {
   currentQ = 0; userAnswers = []; userAnswerTimes = []; answered = false;
-  // Compose a balanced random selection from all sections
+  // Compose a balanced random selection from all sections, EXCLUDING yesterday's ids
   const N = TEST_SIZE;
-  const vocab = bySection('語彙');
-  const gram = bySection('文法');
-  const read = bySection('長文読解');
+  const skip = getYesterdayUsedIds();
+  const filt = arr => arr.filter(q => !skip.has(q.id));
+  let vocab = filt(bySection('語彙'));
+  let gram = filt(bySection('文法'));
+  let read = filt(bySection('長文読解'));
+  // Fallback if too restrictive (e.g., yesterday used most of a section)
+  if (vocab.length < Math.round(N*0.5)) vocab = bySection('語彙');
+  if (gram.length < Math.round(N*0.25)) gram = bySection('文法');
+  if (read.length < N - Math.round(N*0.5) - Math.round(N*0.25)) read = bySection('長文読解');
   // proportional split: 50% vocab, 25% gram, 25% read
   const nv = Math.round(N * 0.5);
   const ng = Math.round(N * 0.25);
@@ -854,7 +948,10 @@ function showResults() {
     .filter(([, d]) => Math.round(d.correct / d.total * 100) < 70)
     .map(([n]) => n);
 
-  saveRecord('mock', pct, questions.length, totalTime, sectionStats);
+  saveRecord('mock', pct, questions.length, totalTime, sectionStats, questions.map(q => q.id));
+
+  // Build the post-test vocabulary quiz from words that appeared in this test + notebook words
+  buildVocabCheck();
 }
 
 // ─── ③ Weak Areas ─────────────────────────────────────────────────────────────
@@ -1023,7 +1120,7 @@ function showRetestResult() {
     retestSec[q.section].total++;
     if (retestAnswers[i] === q.answer) retestSec[q.section].correct++;
   });
-  saveRecord('retest', pct, retestQuestions.length, totalTime, retestSec);
+  saveRecord('retest', pct, retestQuestions.length, totalTime, retestSec, retestQuestions.map(q => q.id));
 
   let reviewHtml = '';
   retestQuestions.forEach((q, i) => {
@@ -1279,6 +1376,198 @@ function renderSectionTrendSVG() {
       </svg>
     </div>
     <div style="text-align:center; margin-top:6px;">${legend}</div>`;
+}
+
+// ─── Vocab quiz (post-grading 20-question word check) ───────────────────────
+let vocabCheckQs = []; // [{word, meaning, choices: [m,m,m,m,'分からない'], answer: 0..3, fromNotebook}]
+let vocabCheckAns = [];
+
+// Pool of all known (word, meaning) pairs from QBANK vocab questions
+function allKnownWords() {
+  const arr = [];
+  for (const q of QBANK) {
+    if (q.section !== '語彙' || !q.meanings) continue;
+    q.choices.forEach((c, i) => {
+      const m = q.meanings[i];
+      if (c && m) arr.push({ word: c, meaning: m });
+    });
+  }
+  // dedupe by word (keep first meaning encountered)
+  const seen = new Map();
+  for (const it of arr) if (!seen.has(it.word)) seen.set(it.word, it.meaning);
+  return [...seen.entries()].map(([word, meaning]) => ({ word, meaning }));
+}
+
+// Build a 20-question vocab check using current test's vocab words + notebook words.
+function buildVocabCheck() {
+  const KNOWN = allKnownWords();
+  const knownMap = new Map(KNOWN.map(k => [k.word, k.meaning]));
+
+  // 1) Words from this mock test (vocab choices that have meanings)
+  const fromTest = [];
+  for (const q of (questions || [])) {
+    if (q.section !== '語彙' || !q.meanings) continue;
+    q.choices.forEach((c, i) => {
+      if (q.meanings[i]) fromTest.push({ word: c, meaning: q.meanings[i], src: 'test' });
+    });
+  }
+  // 2) Notebook words (priority for review)
+  const nb = getNotebook();
+  const fromNb = Object.entries(nb).map(([w, d]) => ({ word: w, meaning: d.meaning, src: 'nb' }));
+
+  // dedupe: notebook wins over test
+  const wordMap = new Map();
+  for (const it of fromTest) if (!wordMap.has(it.word)) wordMap.set(it.word, it);
+  for (const it of fromNb) wordMap.set(it.word, it); // overwrite to mark notebook
+  let pool = [...wordMap.values()];
+  // shuffle & cap at 20; if fewer than 20, top up from KNOWN
+  pool = shuffle(pool);
+  if (pool.length < 20) {
+    const have = new Set(pool.map(p => p.word));
+    const extras = shuffle(KNOWN.filter(k => !have.has(k.word))).slice(0, 20 - pool.length);
+    pool = pool.concat(extras.map(e => ({ ...e, src: 'extra' })));
+  }
+  pool = pool.slice(0, 20);
+
+  // For each word, build choices = correct meaning + 3 random distractor meanings + '分からない'
+  vocabCheckQs = pool.map(({ word, meaning, src }) => {
+    const distractorPool = KNOWN.filter(k => k.meaning !== meaning).map(k => k.meaning);
+    const distractors = shuffle([...new Set(distractorPool)]).slice(0, 3);
+    const all = shuffle([meaning, ...distractors]);
+    const ans = all.indexOf(meaning);
+    all.push('分からない'); // index 4 is always "don't know"
+    return { word, meaning, choices: all, answer: ans, fromNotebook: src === 'nb' };
+  });
+  vocabCheckAns = new Array(vocabCheckQs.length).fill(null);
+  renderVocabCheck(false);
+}
+
+function renderVocabCheck(graded) {
+  if (!vocabCheckQs.length) {
+    document.getElementById('vocabCheckArea').innerHTML = '<div class="empty">出題する単語がありません。</div>';
+    document.getElementById('vocabCheckNav').style.display = 'none';
+    return;
+  }
+  let html = '';
+  vocabCheckQs.forEach((q, i) => {
+    const picked = vocabCheckAns[i];
+    const choicesHtml = q.choices.map((c, ci) => {
+      let cls = 'choice';
+      if (graded) {
+        if (ci === 4 && picked === 4) cls += ' selected'; // don't-know shown gray
+        else if (ci === q.answer) cls += ' correct';
+        else if (ci === picked) cls += ' wrong';
+      } else if (ci === picked) {
+        cls += ' selected';
+      }
+      const dis = graded ? 'disabled' : '';
+      return `<button class="${cls}" id="vc_${i}_${ci}" onclick="selectVocab(${i},${ci})" ${dis} style="font-size:13px; padding:8px 12px;">
+        ${ci === 4 ? '🤔 ' : '<span class="choice-key" style="font-size:10px; width:22px; height:22px;">' + 'ABCD'[ci] + '</span>'} ${escapeHtml(c)}
+      </button>`;
+    }).join('');
+    let expHtml = '';
+    if (graded) {
+      const isUnknown = picked === 4;
+      const isCorrect = picked === q.answer;
+      if (isCorrect) {
+        expHtml = `<div style="margin-top:6px; padding:8px 10px; background:#E0F7F4; border-radius:6px; font-size:12px; color:#00695C;">✅ せいかい！ ${q.word} = ${escapeHtml(q.meaning)}</div>`;
+      } else if (isUnknown) {
+        expHtml = `<div style="margin-top:6px; padding:8px 10px; background:#FFF8E1; border-radius:6px; font-size:12px; color:#7A4900;">📔 単語帳に登録: <b>${q.word}</b> = ${escapeHtml(q.meaning)}<br>くりかえし出題されるよ！</div>`;
+      } else {
+        expHtml = `<div style="margin-top:6px; padding:8px 10px; background:#E3F2FD; border-radius:6px; font-size:12px; color:#0D47A1;">❌ ちがいます。<b>${q.word}</b> = ${escapeHtml(q.meaning)}</div>`;
+      }
+    }
+    const nbBadge = q.fromNotebook ? '<span style="background:#FFE082; color:#7A4900; font-size:10px; padding:2px 6px; border-radius:10px; margin-left:6px;">📔 復習</span>' : '';
+    html += `<div style="padding:10px 0; border-bottom:1px solid var(--border);">
+      <div style="font-size:14px; font-weight:600; margin-bottom:6px;">${i+1}. <span style="color:var(--accent);">${q.word}</span> ってどんな意味？${nbBadge}</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">${choicesHtml}</div>
+      ${expHtml}
+    </div>`;
+  });
+  document.getElementById('vocabCheckArea').innerHTML = html;
+  if (!graded) {
+    document.getElementById('vocabCheckNav').style.display = 'block';
+  } else {
+    document.getElementById('vocabCheckNav').style.display = 'none';
+  }
+}
+
+function selectVocab(qi, ci) {
+  vocabCheckAns[qi] = ci;
+  renderVocabCheck(false);
+}
+
+function gradeVocabCheck() {
+  // Update notebook based on each answer
+  vocabCheckQs.forEach((q, i) => {
+    const picked = vocabCheckAns[i];
+    const isCorrect = picked === q.answer;
+    const isUnknown = picked === 4 || picked == null;
+    // Add wrong/unknown to notebook (if not already)
+    if (!isCorrect) notebookAdd(q.word, q.meaning);
+    // For words already in notebook, record this attempt for spaced repetition
+    if (q.fromNotebook || (!isCorrect)) {
+      // ensure word is in notebook before recording
+      notebookAdd(q.word, q.meaning);
+      notebookRecord(q.word, isCorrect && !isUnknown);
+    }
+  });
+  renderVocabCheck(true);
+  // Quick summary
+  const correct = vocabCheckQs.filter((q,i) => vocabCheckAns[i] === q.answer).length;
+  const unknown = vocabCheckQs.filter((q,i) => vocabCheckAns[i] === 4).length;
+  const wrong = vocabCheckQs.length - correct - unknown;
+  const sum = document.createElement('div');
+  sum.style.cssText = 'margin-top:14px; padding:12px; background:linear-gradient(135deg,#E3F2FD,#F0F7FF); border-radius:10px; font-size:13px; color:#0D47A1;';
+  sum.innerHTML = `<b>📚 単語チェック結果</b><br>✅ 正解: ${correct} ／ ❌ ちがい: ${wrong} ／ 🤔 分からない: ${unknown}<br>📔 単語帳に <b>${wrong + unknown}</b> 個の単語が登録/更新されました。`;
+  document.getElementById('vocabCheckArea').appendChild(sum);
+}
+
+// ─── Notebook UI ────────────────────────────────────────────────────────────
+function showNotebook() {
+  const nb = getNotebook();
+  const words = Object.entries(nb);
+  let html;
+  if (words.length === 0) {
+    html = '<div class="empty">📔 単語帳は空っぽです。<br>テスト後の単語チェックで、間違えたり「分からない」と答えた単語がここに集まります。</div>';
+  } else {
+    // Sort by lowest accuracy first
+    words.sort((a, b) => {
+      const ra = a[1].total ? a[1].correct / a[1].total : 0;
+      const rb = b[1].total ? b[1].correct / b[1].total : 0;
+      return ra - rb;
+    });
+    html = '<div style="display:flex; flex-direction:column; gap:8px;">';
+    for (const [word, d] of words) {
+      const acc = d.total ? Math.round(d.correct / d.total * 100) : 0;
+      const accColor = acc >= 60 ? '#00BFA5' : acc >= 30 ? '#FB8C00' : '#E53935';
+      const close = NB_GRAD_THRESHOLD * 100;
+      html += `<div style="padding:12px 14px; background:linear-gradient(135deg, #FFFBF0, #FFF8E1); border:1px solid #FFE082; border-radius:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px;">
+          <div style="font-size:16px; font-weight:600; color:var(--text);">${escapeHtml(word)}</div>
+          <div style="font-size:11px; color:${accColor}; font-weight:600;">${d.correct}/${d.total} 正解 (${acc}%)</div>
+        </div>
+        <div style="font-size:13px; color:var(--muted); margin-top:2px;">${escapeHtml(d.meaning)}</div>
+        <div style="font-size:10px; color:var(--muted); margin-top:6px;">あと <b>${close}%</b> 以上で卒業 🎓（最低${NB_MIN_ATTEMPTS}回挑戦）</div>
+      </div>`;
+    }
+    html += '</div>';
+    html += `<div style="margin-top:14px; text-align:right;">
+      <button class="btn" style="font-size:12px; padding:5px 12px;" onclick="if(confirm('単語帳をすべて消しますか？')) { localStorage.removeItem('eiken_notebook'); showNotebook(); refreshHomeNotebook(); }">🗑 すべて消す</button>
+    </div>`;
+  }
+  document.getElementById('notebookContent').innerHTML = html;
+  document.getElementById('notebookOverlay').style.display = 'flex';
+}
+function closeNotebook() { document.getElementById('notebookOverlay').style.display = 'none'; }
+
+function refreshHomeNotebook() {
+  const sz = notebookSize();
+  const el = document.getElementById('notebookSummary');
+  if (!el) return;
+  el.textContent = sz === 0
+    ? 'まだ単語が登録されていません'
+    : `${sz} 単語を復習中（タップして開く）`;
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
